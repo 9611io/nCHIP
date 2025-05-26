@@ -88,14 +88,13 @@
             white-space: nowrap;
         }
 
-        /* Chat/Prompt content area that scrolls */
         #main-interaction-content {
             flex-grow: 1; 
             overflow-y: auto; 
             padding: 1rem;
             width: 100%; 
             background-color: var(--color-bg-darkest);
-            min-height: 0; /* Essential for scroll within flex item */
+            min-height: 0; 
         }
 
         #ai-response-display {
@@ -221,10 +220,11 @@
         </nav>
 
         <div id="instructions-bar">
-            <div id="instructionsContent" class="skill-instructions-content-bar">
+            <div id="skill-instructions-content-bar">
+                <p>Loading instructions...</p> 
             </div>
-            <div id="skillActionButtonContainer" class="skill-action-button-container-bar">
-            </div>
+            <div id="skill-action-button-container-bar">
+                </div>
         </div>
 
         <main class="flex-1 flex flex-col overflow-hidden" style="background-color: var(--color-bg-darkest);">
@@ -232,12 +232,10 @@
                 <div class="chip-character-container">
                     <img id="chip-character-image" src="https://9611.io/wp-content/uploads/2025/05/CHIP-wait.png" alt="CHIP Character" onerror="this.src='https://placehold.co/200x350/1F2937/E5E7EB?text=CHIP&font=Inter'; console.error('Error loading CHIP character image.')">
                 </div>
-
                 <div class="flex flex-col flex-1 ml-[220px] md:ml-[240px]"> 
                     <div id="main-interaction-content"> 
-                        <div id="chatHistoryDisplay">
-                            <div id="ai-response-display" class="p-0 md:pr-2 w-full pb-32">
-                                <div class="bot-bubble-main-content-wrapper"></div>
+                        <div id="ai-response-display">
+                            <div class="bot-bubble-main-content-wrapper">
                             </div>
                         </div>
                     </div>
@@ -251,13 +249,12 @@
                             </div>
                         </div>
                     </div>
-                    <button id="clearHistoryButton" style="display:none;"></button>
                 </div>
             </div>
         </main>
     </div>
 
-    <script src="chip-app.js"></script>
+    <script src="/wp-content/themes/kadence/js/chip-app.js" defer></script>
 
 </body>
 </html>
