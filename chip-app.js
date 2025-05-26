@@ -1,64 +1,49 @@
-/**
- * CHIP Application JavaScript (Updated)
- * ---------------------------
- * Fixes:
- * - Changed appContainer.getElementById to document.getElementById.
- * - Ensured all getElementById calls are on the document object.
- * - Added more robust checks for element existence.
- */
+// =====================================================================================
+// chip-app.js
+// This script is designed to work with the accompanying HTML file.
+// It uses the NEW element IDs for the redesigned layout.
+//
+// IMPORTANT: If you were previously using an older chip-app.js,
+// this new version replaces it and is compatible with the new HTML.
+// =====================================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Main application container
-    const appContainer = document.getElementById('chip-app-container');
-    if (!appContainer) {
-        console.error("CHIP Critical Error: Main application container #chip-app-container not found. App cannot initialize.");
-        // Optionally, display a message to the user within a known, simple part of the page if possible
-        // document.body.innerHTML = '<p style="color:red; text-align:center; font-size:18px;">CHIP Application Error: Main container not found.</p>' + document.body.innerHTML;
-        return; // Stop execution if the main container isn't there
+    // DOM Element References
+    const chipAppContainer = document.getElementById('chip-app-container');
+    if (!chipAppContainer) {
+        console.error("CRITICAL DOM ERROR: #chip-app-container not found. App cannot start.");
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = "color:red;background:white;padding:20px;position:fixed;top:10px;left:10px;z-index:10000;border:2px solid darkred; font-family: Arial, sans-serif; font-size: 16px;";
+        errorDiv.innerHTML = "<strong>Application Critical Error:</strong><br>The main application container ('#chip-app-container') is missing. CHIP cannot start.";
+        document.body.appendChild(errorDiv);
+        return;
     }
 
-    // DOM Element References - Always use document.getElementById for unique IDs
-    const skillButtons = document.querySelectorAll('#chip-app-container .skill-button'); // Scoped querySelectorAll
-    const aiResponseDisplay = document.getElementById('ai-response-display');
-    const chatHistoryDisplay = document.getElementById('chatHistoryDisplay');
-    const chatInput = document.getElementById('chat-input');
-    const sendButton = document.getElementById('send-button');
-    const chipCharacterImage = document.getElementById('chip-character-image');
-    const instructionsContent = document.getElementById('instructionsContent');
-    const skillActionButtonContainer = document.getElementById('skillActionButtonContainer');
-    const clearHistoryButton = document.getElementById('clearHistoryButton');
-
-    // Check if essential elements exist to prevent further errors
-    const essentialElements = {
-        aiResponseDisplay, chatHistoryDisplay, chatInput, sendButton,
-        chipCharacterImage, instructionsContent, skillActionButtonContainer, clearHistoryButton
-    };
-
-    for (const key in essentialElements) {
-        if (!essentialElements[key]) {
-            console.error(`CHIP Error: Essential UI element with ID corresponding to '${key}' is missing. App functionality will be limited. Please check HTML structure for the element that should be linked to this variable.`);
-        }
-    }
-    if (skillButtons.length === 0) {
-         console.warn("CHIP Warning: No skill buttons found with class .skill-button inside #chip-app-container.");
-    }
-
+    const skillButtons = Array.from(chipAppContainer.querySelectorAll('.skill-button'));
+    const aiResponseDisplay = chipAppContainer.querySelector('#ai-response-display');
+    const mainBotContentWrapper = aiResponseDisplay.querySelector('.bot-bubble-main-content-wrapper');
+    
+    const chatInput = chipAppContainer.querySelector('#chat-input');
+    const sendButton = chipAppContainer.querySelector('#send-button');
+    const chipCharacterImage = chipAppContainer.querySelector('#chip-character-image');
+    
+    // ** Using the CORRECTED IDs for the new layout **
+    const instructionsContentBar = chipAppContainer.querySelector('#skill-instructions-content-bar'); 
+    const skillActionButtonContainerBar = chipAppContainer.querySelector('#skill-action-button-container-bar'); 
 
     // Application State
     let ALL_PROMPTS = [];
     let currentSkill = 'Clarifying'; // Default skill
     let currentPromptId = null;
     let currentPromptDetails = null;
-    let conversationHistory = [];
+    let conversationHistory = []; 
     let currentExhibitIndex = 0;
     let doneAsking = false;
     let hypothesisCount = 0;
 
-    // Configuration URLs
     const OPENAI_PROXY_URL = 'https://chip.zoran-a18.workers.dev/';
     const PROMPTS_JSON_URL = 'https://raw.githubusercontent.com/9611io/CHIP/main/prompts.json';
 
-    // CHIP Character Images
     const chipImages = {
         default: "https://9611.io/wp-content/uploads/2025/05/CHIP-wait.png",
         waiting: "https://9611.io/wp-content/uploads/2025/05/CHIP-wait.png",
@@ -71,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pointingUpward: "https://9611.io/wp-content/uploads/2025/05/CHIP-talk.png"
     };
     const chipAvatarSmall = "https://placehold.co/40x40/007ACC/FFFFFF?text=C&font=Inter&bold";
+    const chipAvatarError = "https://placehold.co/40x40/000000/FFFFFF?text=C&font=Inter";
 
     const skillInstructions = {
         "Clarifying": "Read the prompt, then enter your clarifying questions one at a time. Press \"Send\" to submit. When satisfied, click the \"End Clarification Questions\" button in this panel.",
@@ -80,286 +66,488 @@ document.addEventListener('DOMContentLoaded', () => {
         "Recommendation": "Review the case and findings, then structure your final recommendation (rationale, risks, next steps). Click the \"Submit Recommendation\" button that will appear in this panel."
     };
 
-    // --- UI Update Functions ---
-    function updateInstructions(skill) {
-        if (instructionsContent) {
-            instructionsContent.innerHTML = `<p>${skillInstructions[skill] || "Select a skill to see instructions."}</p>`;
-        } else {
-            console.warn("CHIP: instructionsContent element not found for updating instructions.");
+    // ** This function now uses instructionsContentBar **
+    function updateInstructionsUI(skill) {
+        console.log("Updating instructions for skill:", skill); 
+        if (!instructionsContentBar) { 
+            console.error("updateInstructionsUI: #skill-instructions-content-bar element not found. Cannot update instructions."); 
+            return; 
         }
+        const instructionText = skillInstructions[skill] || "Select a skill to see instructions.";
+        instructionsContentBar.innerHTML = `<p>${instructionText}</p>`;
+        console.log("Instructions updated to:", instructionText); 
     }
 
-    function setChipCharacterPose(pose) {
-        if (chipCharacterImage) {
-            chipCharacterImage.src = chipImages[pose] || chipImages.default;
-        } else {
-            console.warn("CHIP: chipCharacterImage element not found for setting pose.");
+    function setChipCharacterPose(poseKey) {
+        if (!chipCharacterImage) { console.error("setChipCharacterPose: chipCharacterImage element not found."); return; }
+        const pose = poseKey || 'default';
+        chipCharacterImage.src = chipImages[pose] || chipImages.default;
+    }
+    
+    function setMainBotContentArea(htmlString) { 
+        if (!mainBotContentWrapper) {
+            console.error("CRITICAL: .bot-bubble-main-content-wrapper NOT FOUND.");
+            return;
         }
+        mainBotContentWrapper.innerHTML = htmlString;
+        const mainInteractionContent = document.getElementById('main-interaction-content');
+        if (mainInteractionContent) mainInteractionContent.scrollTop = 0; 
     }
 
+    function appendUserChatBubble(text) { 
+        if (!aiResponseDisplay) { console.error("appendUserChatBubble: aiResponseDisplay element not found."); return; }
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item-user';
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble user-bubble-chat';
+        bubble.textContent = text;
+        chatItem.appendChild(bubble);
+        const avatar = document.createElement('div');
+        avatar.className = 'chat-avatar user-avatar';
+        avatar.textContent = 'U';
+        chatItem.appendChild(avatar);
+        aiResponseDisplay.appendChild(chatItem);
+
+        const mainInteractionContent = document.getElementById('main-interaction-content');
+        if (mainInteractionContent) mainInteractionContent.scrollTop = mainInteractionContent.scrollHeight;
+    }
+
+    function appendAiChatBubble(htmlText) { 
+        if (!aiResponseDisplay) { console.error("appendAiChatBubble: aiResponseDisplay element not found."); return; }
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item-ai';
+        const avatar = document.createElement('div');
+        avatar.className = 'chat-avatar ai-avatar';
+        const img = document.createElement('img');
+        img.src = chipAvatarSmall;
+        img.alt = 'CHIP';
+        img.onerror = () => { img.src = chipAvatarError; console.error('Error loading CHIP small avatar for chat.'); };
+        avatar.appendChild(img);
+        chatItem.appendChild(avatar);
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble ai-bubble-chat';
+        bubble.innerHTML = htmlText;
+        chatItem.appendChild(bubble);
+        aiResponseDisplay.appendChild(chatItem);
+        
+        const mainInteractionContent = document.getElementById('main-interaction-content');
+        if (mainInteractionContent) mainInteractionContent.scrollTop = mainInteractionContent.scrollHeight;
+    }
+
+    function displayTypingIndicatorInMain() {
+        setChipCharacterPose('thinking');
+        appendAiChatBubble(`<p class="p-2 text-[var(--color-text-medium)] italic">CHIP is typing...</p>`);
+    }
+    
     function resetSkillState() {
         console.log("Resetting skill state for:", currentSkill);
-        conversationHistory = [];
         currentPromptId = null;
         currentPromptDetails = null;
         currentExhibitIndex = 0;
         doneAsking = false;
         hypothesisCount = 0;
-        if (aiResponseDisplay) aiResponseDisplay.innerHTML = '';
-        if (skillActionButtonContainer) skillActionButtonContainer.innerHTML = '';
+
+        if (mainBotContentWrapper) { 
+            mainBotContentWrapper.innerHTML = '';
+        }
+        if (aiResponseDisplay) { 
+            Array.from(aiResponseDisplay.children).forEach(child => {
+                if (!child.classList.contains('bot-bubble-main-content-wrapper')) {
+                    aiResponseDisplay.removeChild(child);
+                }
+            });
+        }
+        // ** This function now uses skillActionButtonContainerBar **
+        if (skillActionButtonContainerBar) { 
+            skillActionButtonContainerBar.innerHTML = '';
+        } else {
+            console.error("resetSkillState: #skill-action-button-container-bar not found.");
+        }
     }
 
-    function createSkillActionButton(text, id, onClickHandler) {
-        if (!skillActionButtonContainer) {
-            console.warn("CHIP: skillActionButtonContainer element not found.");
-            return;
+    // ** This function now uses skillActionButtonContainerBar **
+    function createSkillActionButton(text, id, onClickHandler) { 
+        if (!skillActionButtonContainerBar) { 
+            console.error("createSkillActionButton: #skill-action-button-container-bar element not found. Cannot create button."); 
+            return; 
         }
-        skillActionButtonContainer.innerHTML = '';
+        skillActionButtonContainerBar.innerHTML = ''; 
         const button = document.createElement('button');
         button.id = id;
         button.textContent = text;
-        button.classList.add('action-button');
+        button.classList.add('action-button'); 
         button.addEventListener('click', onClickHandler);
-        skillActionButtonContainer.appendChild(button);
+        skillActionButtonContainerBar.appendChild(button);
     }
 
-    // --- Skill-Specific Action Handlers ---
     function handleEndClarifying() {
         console.log("Ending Clarifying Questions");
         doneAsking = true;
-        if(skillActionButtonContainer) skillActionButtonContainer.innerHTML = '';
+        if(skillActionButtonContainerBar) skillActionButtonContainerBar.innerHTML = '';
         setChipCharacterPose('feedback');
-        displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="p-4">Clarifying questions ended. Generating feedback...</p></div>`);
+        appendAiChatBubble(`<p class="p-2">Clarifying questions ended. CHIP will now provide feedback on this section if available, or you can proceed to the next skill.</p>`);
     }
 
     function handleEndHypothesis() {
         console.log("Ending Hypothesis Formulation");
         doneAsking = true;
-        if(skillActionButtonContainer) skillActionButtonContainer.innerHTML = '';
+        if(skillActionButtonContainerBar) skillActionButtonContainerBar.innerHTML = '';
         setChipCharacterPose('feedback');
-        displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="p-4">Hypothesis formulation ended. Generating feedback...</p></div>`);
+        appendAiChatBubble(`<p class="p-2">Hypothesis formulation ended. CHIP will now provide feedback.</p>`);
     }
 
     function handleSubmitFramework() {
         console.log("Framework Submitted");
-        doneAsking = true;
-        if(skillActionButtonContainer) skillActionButtonContainer.innerHTML = '';
+        doneAsking = true; 
+        if(skillActionButtonContainerBar) skillActionButtonContainerBar.innerHTML = '';
         setChipCharacterPose('feedback');
-        displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="p-4">Framework submitted. Generating feedback...</p></div>`);
+        appendAiChatBubble(`<p class="p-2">Framework submitted. CHIP will provide feedback.</p>`);
     }
     function handleSubmitAnalysis() {
-        console.log("Analysis Submitted");
-        doneAsking = true;
-        if(skillActionButtonContainer) skillActionButtonContainer.innerHTML = '';
-        setChipCharacterPose('feedback');
-        displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="p-4">Analysis submitted. Generating feedback...</p></div>`);
+        console.log("Analysis Submitted for exhibit " + (currentExhibitIndex + 1));
+        if (currentPromptDetails && currentPromptDetails.exhibits && currentExhibitIndex < currentPromptDetails.exhibits.length - 1) {
+            currentExhibitIndex++;
+            doneAsking = false; 
+            appendAiChatBubble(`<p class="p-2">Analysis for exhibit ${currentExhibitIndex} received. Moving to exhibit ${currentExhibitIndex + 1}.</p>`);
+            displayCurrentPromptAndExhibit(); 
+        } else {
+            doneAsking = true;
+            if(skillActionButtonContainerBar) skillActionButtonContainerBar.innerHTML = '';
+            setChipCharacterPose('feedback');
+            appendAiChatBubble(`<p class="p-2">Final analysis submitted. CHIP will provide feedback.</p>`);
+        }
     }
     function handleSubmitRecommendation() {
         console.log("Recommendation Submitted");
         doneAsking = true;
-        if(skillActionButtonContainer) skillActionButtonContainer.innerHTML = '';
+        if(skillActionButtonContainerBar) skillActionButtonContainerBar.innerHTML = '';
         setChipCharacterPose('feedback');
-        displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="p-4">Recommendation submitted. Generating feedback...</p></div>`);
-    }
-    
-    function handleClearHistory() {
-        if (chatHistoryDisplay) chatHistoryDisplay.innerHTML = '';
-        conversationHistory = [];
-        console.log("Chat history cleared.");
+        appendAiChatBubble(`<p class="p-2">Recommendation submitted. CHIP will provide overall feedback.</p>`);
     }
 
-
-    // --- Prompt Loading and Management ---
     function selectNewPromptJS() {
+        console.log("selectNewPromptJS called. ALL_PROMPTS length:", ALL_PROMPTS ? ALL_PROMPTS.length : 'undefined');
         if (!ALL_PROMPTS || ALL_PROMPTS.length === 0) {
-            console.error("CHIP: ALL_PROMPTS is empty or not loaded.");
+            console.error("selectNewPromptJS: ALL_PROMPTS is empty or not loaded.");
+            setMainBotContentArea(`<p style="color:red; padding:1rem;">Error: Prompts data not available (SNJS-1).</p>`);
             return null;
         }
         const skillPrompts = ALL_PROMPTS.filter(p => p.skill_type === currentSkill);
         if (!skillPrompts.length) {
-            console.error("CHIP: No prompts found for skill:", currentSkill);
-            displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p style="color:red; padding:1rem;">Error: No prompts found for ${currentSkill}.</p></div>`);
+            console.error("selectNewPromptJS: No prompts found for skill:", currentSkill);
+            setMainBotContentArea(`<p style="color:red; padding:1rem;">Error: No prompts found for ${currentSkill}.</p>`);
             return null;
         }
         const randomIndex = Math.floor(Math.random() * skillPrompts.length);
         currentPromptId = skillPrompts[randomIndex].id;
-        console.log("Selected prompt ID:", currentPromptId, "for skill:", currentSkill);
+        console.log("selectNewPromptJS: Selected prompt ID:", currentPromptId, "for skill:", currentSkill);
         return currentPromptId;
     }
 
-    function getPromptDetailsJS(promptId) {
+    function getPromptDetailsJS(promptIdToFetch) {
+        console.log("getPromptDetailsJS called for ID:", promptIdToFetch);
         if (!ALL_PROMPTS) {
-            console.error("CHIP: ALL_PROMPTS not loaded during getPromptDetailsJS.");
+            console.error("getPromptDetailsJS: ALL_PROMPTS not loaded.");
+            setMainBotContentArea(`<p style="color:red; padding:1rem;">Error: Prompts data not available for details (GPDJS-1).</p>`);
             return null;
         }
-        currentPromptDetails = ALL_PROMPTS.find(p => p.id === promptId);
-        return currentPromptDetails;
+        const details = ALL_PROMPTS.find(p => p.id === promptIdToFetch);
+        if (details) {
+            console.log("getPromptDetailsJS: Found details for prompt ID", promptIdToFetch);
+        } else {
+            console.error("getPromptDetailsJS: No details found for prompt ID", promptIdToFetch);
+            setMainBotContentArea(`<p style="color:red; padding:1rem;">Error: Could not find details for prompt ID ${promptIdToFetch}.</p>`);
+        }
+        return details;
+    }
+    
+    function buildMessagesArrayForAPI(userInput) {
+        const prompt = currentPromptDetails;
+        if (!prompt) {
+            console.error("buildMessagesArrayForAPI: currentPromptDetails is null!");
+            return [{ role: "system", content: "Error: Prompt details missing." }, { role: "user", content: userInput }];
+        }
+
+        let systemMessageContent = "";
+        let userMessageContent = "";
+        let apiMessages = [];
+
+        switch(currentSkill) {
+            case 'Clarifying':
+                systemMessageContent = `Case Prompt: ${prompt.prompt_text}. Candidate is asking a clarifying question. Provide a concise answer or ask for refinement.`;
+                userMessageContent = `Clarifying question: ${userInput}`;
+                break;
+            case 'Hypothesis':
+                systemMessageContent = `Case Prompt: ${prompt.prompt_text}. Candidate is proposing a hypothesis. Provide a contradicting data point or ask for a clearer hypothesis. History: ${conversationHistory.filter(m=>m.role !== 'system').map(m => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`).join('\n')}`;
+                userMessageContent = `Hypothesis: ${userInput}`;
+                hypothesisCount++;
+                break;
+            case 'Frameworks':
+                systemMessageContent = `Case Prompt: ${prompt.prompt_text}. Candidate is proposing a framework. Evaluate for MECE, relevance, and provide feedback.`;
+                userMessageContent = `Framework: ${userInput}`;
+                break;
+            case 'Analysis':
+                const exhibit = prompt.exhibits ? prompt.exhibits[currentExhibitIndex] : null;
+                if (!exhibit) { systemMessageContent = "Error: Exhibit data missing."; userMessageContent = userInput; break; }
+                const exhibitData = exhibit.chart_type === 'table' ? JSON.stringify(exhibit.data) : (exhibit.summary_text ? exhibit.summary_text.join('\n') : "No summary text.");
+                systemMessageContent = `Case Prompt: ${prompt.prompt_text}. Exhibit (${currentExhibitIndex + 1}/${prompt.exhibits.length}): ${exhibit.exhibit_title}. Data: ${exhibitData}. Candidate is providing analysis. Evaluate insights and connection to case.`;
+                userMessageContent = `Analysis: ${userInput}`;
+                break;
+            case 'Recommendation':
+                const exhibitsSummary = prompt.exhibits ? prompt.exhibits.map((ex, i) => `Exhibit ${i+1}: ${ex.exhibit_title}`).join(', ') : "None";
+                systemMessageContent = `Case Prompt: ${prompt.prompt_text}. Exhibits Summary: ${exhibitsSummary}. Candidate is providing a recommendation. Evaluate based on case, evidence, actionability, risks, next steps.`;
+                userMessageContent = `Recommendation: ${userInput}`;
+                break;
+            default:
+                systemMessageContent = prompt.prompt_text || "You are a helpful assistant.";
+                userMessageContent = userInput;
+        }
+
+        apiMessages.push({ role: "system", content: systemMessageContent });
+        conversationHistory.filter(m => m.role !== 'system').forEach(msg => { 
+             apiMessages.push({role: msg.role, content: msg.content});
+        });
+        apiMessages.push({ role: "user", content: userMessageContent });
+        
+        return apiMessages;
     }
 
-    function initializeSkill(skillName) {
-        currentSkill = skillName;
-        resetSkillState();
-        updateInstructions(currentSkill);
-        selectNewPromptJS();
+    async function handleSendButtonClick() {
+        const userInputText = chatInput.value.trim();
+        if (!userInputText) return;
 
-        if (currentPromptId) {
-            getPromptDetailsJS(currentPromptId);
-            if (currentPromptDetails) {
-                displayCurrentPromptAndExhibit();
-                if (currentSkill === "Clarifying" && !doneAsking) {
-                    createSkillActionButton("End Clarification Questions", "end-clarifying-btn", handleEndClarifying);
-                } else if (currentSkill === "Hypothesis" && !doneAsking) {
-                    if (hypothesisCount < 3) {
-                        createSkillActionButton("End Hypothesis Formulation", "end-hypothesis-btn", handleEndHypothesis);
+        appendUserChatBubble(userInputText);
+        conversationHistory.push({ role: "user", content: userInputText });
+
+        chatInput.value = '';
+        setChipCharacterPose('thinking');
+        displayTypingIndicatorInMain(); 
+
+        if (!currentPromptDetails) {
+            console.error("handleSendButtonClick: currentPromptDetails is not set.");
+            const typingIndicatorBubble = Array.from(aiResponseDisplay.querySelectorAll('.ai-bubble-chat')).pop();
+            if (typingIndicatorBubble && typingIndicatorBubble.textContent.includes("CHIP is typing...")) {
+                typingIndicatorBubble.parentElement.remove();
+            }
+            appendAiChatBubble("<p style='color:red;'>Error: No active prompt. Please select a skill or reload.</p>");
+            setChipCharacterPose('waiting');
+            return;
+        }
+        
+        const messagesForApi = buildMessagesArrayForAPI(userInputText);
+        console.log("Sending to API:", JSON.stringify(messagesForApi, null, 2));
+        
+        try {
+            const response = await fetch(OPENAI_PROXY_URL, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt_id: currentPromptDetails.id,
+                    skill_type: currentSkill,
+                    messages: messagesForApi
+                })
+            });
+
+            console.log("API Response Status:", response.status); 
+
+            const typingIndicatorBubble = Array.from(aiResponseDisplay.querySelectorAll('.ai-bubble-chat')).pop();
+            if (typingIndicatorBubble && typingIndicatorBubble.textContent.includes("CHIP is typing...")) {
+                typingIndicatorBubble.parentElement.remove(); 
+            }
+
+            if (!response.ok) { 
+                const errorText = await response.text();
+                console.error("API Error Response Text:", errorText);
+                throw new Error(`API request failed with status ${response.status}: ${errorText}`);
+            }
+
+            const jsonResponse = await response.json();
+            console.log("API JSON Response:", jsonResponse); 
+
+            const aiText = jsonResponse.choices?.[0]?.message?.content || jsonResponse.output || `Sorry, I received an unexpected response structure. Raw: ${JSON.stringify(jsonResponse).substring(0,100)}...`;
+            
+            console.log("Extracted AI Text:", aiText);
+
+            appendAiChatBubble(aiText);
+            conversationHistory.push({ role: "assistant", content: aiText });
+            setChipCharacterPose('waiting');
+
+            if (currentSkill === "Hypothesis") {
+                if (hypothesisCount >= 3 && !doneAsking) {
+                    appendAiChatBubble("<p class='mt-2'>You've refined your hypothesis multiple times. Consider clicking 'End Hypothesis Formulation' or provide your final refined hypothesis.</p>");
+                    if (skillActionButtonContainerBar && !skillActionButtonContainerBar.querySelector('#end-hypothesis-btn')) { // Check if container exists
+                         createSkillActionButton("End Hypothesis Formulation", "end-hypothesis-btn", handleEndHypothesis);
                     }
-                } else if (currentSkill === "Frameworks" && !doneAsking) {
-                    createSkillActionButton("Submit Framework", "submit-framework-btn", handleSubmitFramework);
-                } else if (currentSkill === "Analysis" && !doneAsking) {
-                    createSkillActionButton("Submit Analysis", "submit-analysis-btn", handleSubmitAnalysis);
-                } else if (currentSkill === "Recommendation" && !doneAsking) {
-                    createSkillActionButton("Submit Recommendation", "submit-recommendation-btn", handleSubmitRecommendation);
+                } else if (!doneAsking) {
+                     if (skillActionButtonContainerBar && !skillActionButtonContainerBar.querySelector('#end-hypothesis-btn')) { // Check if container exists
+                        createSkillActionButton("End Hypothesis Formulation", "end-hypothesis-btn", handleEndHypothesis);
+                     }
                 }
+            }
+
+        } catch (err) {
+            console.error("API Call Error in catch block:", err);
+            const typingIndicatorBubbleOnError = Array.from(aiResponseDisplay.querySelectorAll('.ai-bubble-chat')).pop();
+            if (typingIndicatorBubbleOnError && typingIndicatorBubbleOnError.textContent.includes("CHIP is typing...")) {
+                typingIndicatorBubbleOnError.parentElement.remove();
+            }
+            appendAiChatBubble(`<p style="color:red;">Error: ${err.message}. Check console for details.</p>`);
+            setChipCharacterPose('waiting');
+        }
+    }
+
+    if (sendButton) sendButton.addEventListener('click', handleSendButtonClick);
+    if (chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendButtonClick();} });
+
+    function initializeSkill(skillName) {
+        console.log("initializeSkill called for:", skillName);
+        currentSkill = skillName; 
+        resetSkillState(); 
+        updateInstructionsUI(currentSkill); 
+        conversationHistory = []; 
+        currentExhibitIndex = 0;
+
+        currentPromptId = selectNewPromptJS(); 
+        if (currentPromptId) {
+            currentPromptDetails = getPromptDetailsJS(currentPromptId);
+            if (currentPromptDetails) {
+                displayCurrentPromptAndExhibit(); 
+                if (currentSkill === "Clarifying" && !doneAsking) createSkillActionButton("End Clarification Questions", "end-clarifying-btn", handleEndClarifying);
+                else if (currentSkill === "Hypothesis" && !doneAsking ) createSkillActionButton("End Hypothesis Formulation", "end-hypothesis-btn", handleEndHypothesis);
+                else if (currentSkill === "Frameworks" && !doneAsking) createSkillActionButton("Submit Framework", "submit-framework-btn", handleSubmitFramework);
+                else if (currentSkill === "Recommendation" && !doneAsking) createSkillActionButton("Submit Recommendation", "submit-recommendation-btn", handleSubmitRecommendation);
             } else {
-                displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p style="color:red; padding:1rem;">Error: Could not load details for the selected prompt.</p></div>`);
+                 setMainBotContentArea(`<p style="color:red; padding:1rem;">Error: Could not load details (IS-1).</p>`);
             }
         } else {
-            // This case is usually handled by selectNewPromptJS if no prompts are found for the skill.
-            // displayAiResponseInMain might have already shown an error.
+            updateInstructionsUI(currentSkill); 
+            setMainBotContentArea(`<p class="p-4 text-[var(--color-text-medium)]">No case available for '${currentSkill}' at the moment. Try another skill or check back later.</p>`);
         }
         setChipCharacterPose('waiting');
     }
 
     async function loadPrompts() {
-        console.log("CHIP: Attempting to load prompts from:", PROMPTS_JSON_URL);
+        console.log("loadPrompts: Attempting to load prompts...");
+        updateInstructionsUI(currentSkill); 
+        setMainBotContentArea(`<p class="p-4 text-[var(--color-text-medium)]">Loading practice cases...</p>`);
         try {
-            const response = await fetch(PROMPTS_JSON_URL);
-            if (!response.ok) {
-                throw new Error(`HTTP error loading prompts! Status: ${response.status} from ${PROMPTS_JSON_URL}`);
-            }
+            const response = await fetch(PROMPTS_JSON_URL + '?t=' + new Date().getTime());
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
             ALL_PROMPTS = await response.json();
-            if (!Array.isArray(ALL_PROMPTS) || ALL_PROMPTS.length === 0) {
-                throw new Error("Prompts data is not a valid array or is empty.");
-            }
-            console.log("CHIP: Prompts loaded successfully:", ALL_PROMPTS.length, "prompts found.");
+            if (!Array.isArray(ALL_PROMPTS) || ALL_PROMPTS.length === 0) throw new Error("Prompts data invalid.");
+            console.log("loadPrompts: Prompts loaded:", ALL_PROMPTS.length);
+            
+            const activeButton = skillButtons.find(btn => btn.classList.contains('active'));
+            currentSkill = activeButton ? activeButton.textContent.trim() : 'Clarifying'; 
+            console.log("loadPrompts: Initializing with skill:", currentSkill);
+            initializeSkill(currentSkill); 
 
-            const activeButton = document.querySelector('#chip-app-container .skill-button.active'); //Scoped
-            if (activeButton) {
-                currentSkill = activeButton.textContent.trim();
-            }
-            initializeSkill(currentSkill);
         } catch (error) {
-            console.error("CHIP: Could not load or parse prompts:", error);
-            displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p style="color:red; padding:1rem;">Error: Could not load practice cases. Check console (F12) and ensure prompts.json URL is correct & accessible (CORS).</p></div>`);
+            console.error("loadPrompts Error:", error);
+            setMainBotContentArea(`<p style="color:red; padding:1rem;">Error loading cases: ${error.message}.</p>`);
+            updateInstructionsUI(currentSkill); 
+            ALL_PROMPTS = [];
         }
     }
 
-    // --- Display Logic for Prompts, Exhibits, and Chat ---
     function displayCurrentPromptAndExhibit() {
-        if (!currentPromptDetails || !aiResponseDisplay) {
-            if (aiResponseDisplay) aiResponseDisplay.innerHTML = `<div class="bot-bubble-main-content-wrapper"><p style="color:red; padding:1rem;">No prompt selected or details available.</p></div>`;
-            else console.error("CHIP: aiResponseDisplay element not found when trying to display prompt.");
-            return;
-        }
+        if (!mainBotContentWrapper) { console.error("DCP&E: mainBotContentWrapper missing"); return; }
+        if (!currentPromptDetails) { setMainBotContentArea(`<p style="color:red;">No prompt details (DCP&E-2).</p>`); return; }
 
-        let htmlContent = `<div class="bot-bubble-main-content-wrapper">`;
-        htmlContent += `<p class="font-semibold mb-1 text-lg p-4" style="color: var(--color-accent-primary);">${currentPromptDetails.title || 'Case Prompt'}</p>`;
-
+        let mainContentHtml = `<p class="font-semibold text-lg p-4 mb-1" style="color: var(--color-accent-primary);">${currentPromptDetails.title || 'Case Prompt'}</p>`;
         if (currentPromptDetails.prompt_text) {
-            const paragraphs = currentPromptDetails.prompt_text.split('\n\n');
-            paragraphs.forEach((paraText, index) => {
-                const pElement = document.createElement('p');
-                pElement.classList.add('text-sm', 'px-4');
-                pElement.classList.toggle('pt-0', index === 0 && !!(currentPromptDetails.title)); // More robust check
-                pElement.classList.toggle('pb-2', index === 0 && !!(currentPromptDetails.title));
-                pElement.classList.toggle('py-2', !(index === 0 && !!(currentPromptDetails.title)));
-                pElement.style.color = 'var(--color-text-medium)';
-                pElement.textContent = paraText;
-                htmlContent += pElement.outerHTML;
+            currentPromptDetails.prompt_text.split('\n\n').forEach(para => {
+                mainContentHtml += `<p class="text-sm px-4 py-2" style="color: var(--color-text-lightest);">${para.replace(/\n/g, '<br>')}</p>`;
             });
         }
 
         if (currentPromptDetails.exhibits && currentPromptDetails.exhibits.length > 0) {
-            const exhibitsToShow = (currentSkill === 'Analysis') ?
-                                 (currentPromptDetails.exhibits[currentExhibitIndex] ? [currentPromptDetails.exhibits[currentExhibitIndex]] : []) :
-                                 currentPromptDetails.exhibits;
+            const exhibitsToShow = (currentSkill === 'Analysis') ? 
+                                    (currentPromptDetails.exhibits[currentExhibitIndex] ? [currentPromptDetails.exhibits[currentExhibitIndex]] : []) 
+                                    : currentPromptDetails.exhibits; 
 
             exhibitsToShow.forEach((exhibit, idx) => {
-                if (!exhibit) return;
-                const exhibitNumber = (currentSkill === 'Analysis') ? currentExhibitIndex + 1 : idx + 1;
-                let exhibitHtml = `<div class="exhibit-container mx-4 mb-4">`; // Tailwind classes for margin
-                exhibitHtml += `<p class="font-semibold text-base mb-1" style="color: var(--color-accent-primary);">${exhibit.exhibit_title || `Exhibit ${exhibitNumber}`}</p>`;
-                if (exhibit.description) {
-                    exhibitHtml += `<p class="text-xs mb-1" style="color: var(--color-text-dark);">${exhibit.description}</p>`;
-                }
+                 if (!exhibit) return;
+                 const exhibitNumberForDisplay = (currentSkill === 'Analysis') ? currentExhibitIndex + 1 : idx + 1;
+                 const totalExhibits = currentPromptDetails.exhibits.length;
+                 const exhibitTitleSuffix = (currentSkill === 'Analysis' && totalExhibits > 1) ? ` (Exhibit ${exhibitNumberForDisplay} of ${totalExhibits})` : '';
 
+                mainContentHtml += `<div class="exhibit-container mx-4 mb-4">`; 
+                mainContentHtml += `<p class="font-semibold text-base mb-1" style="color: var(--color-accent-primary);">${exhibit.exhibit_title || `Exhibit ${exhibitNumberForDisplay}`}${exhibitTitleSuffix}</p>`;
+                if (exhibit.description) {
+                    mainContentHtml += `<p class="text-xs mb-1" style="color: var(--color-text-dark);">${exhibit.description.replace(/\n/g, '<br>')}</p>`;
+                }
                 if (exhibit.chart_type === 'table' && exhibit.data) {
-                    exhibitHtml += '<table class="w-full text-sm text-left" style="color: var(--color-text-secondary);">'; // Tailwind class
+                    mainContentHtml += '<div class="overflow-x-auto"><table class="w-full text-sm text-left" style="color: var(--color-text-lightest);">';
                     const headers = Object.keys(exhibit.data);
-                    if (headers.length > 0 && Array.isArray(exhibit.data[headers[0]])) {
-                        exhibitHtml += '<thead class="text-xs uppercase" style="color: var(--color-text-dark);"><tr>';
-                        const numericHeaders = ['Previous Year', 'Last Year', 'Market Share %', 'Break-Even Volume (000s)', 'Projected Profit ($M)', 'Revenue Change (%)', 'Daily Active Users (000s)', 'Satisfaction Score', 'Utilization %', 'Idle Time (min)', 'Bookings (000s)', 'Cancellation %', 'Score', 'Units', 'Revenue', 'Share %', 'New Subs', 'Churn %', 'Return %', 'Avg Rides', 'Uplift %', 'Sales (000s)', 'Wait Time', 'Avg Wait', 'Demand (MW)', 'Alerts', 'FPR %', 'Accuracy %', 'Cost', 'Downtime', 'Improvement %', 'Completion %', 'Avg Time (min)', 'On-Time %', 'CTR %', 'Impressions (000s)', 'Emissions', 'Target %', 'AQI', 'Attendees', 'Conversion %', 'Abandoned', 'Rating', 'Cost ($k)', 'Days', 'Fulfilled (000s)', 'Avg Days', 'Count', 'Avg Time (hrs)', 'Subscriptions (000s)', 'Yield', 'Members (000s)', 'Logins (000s)'];
-                        headers.forEach(header => {
-                            const isNumeric = numericHeaders.includes(header) || header.endsWith('(000s)') || header.endsWith('%') || header.endsWith('($k)') || header.endsWith('(min)') || header.endsWith('(hrs)');
-                            exhibitHtml += `<th scope="col" class="py-1 px-2 ${isNumeric ? 'text-right' : ''}">${header}</th>`; // Tailwind classes
-                        });
-                        exhibitHtml += '</tr></thead><tbody>';
+                    if (headers.length > 0 && Array.isArray(exhibit.data[headers[0]]) && exhibit.data[headers[0]].length > 0) {
+                        mainContentHtml += '<thead class="text-xs uppercase" style="color: var(--color-text-medium);"><tr>';
+                        headers.forEach(header => mainContentHtml += `<th scope="col" class="py-1 px-2 ${ (typeof exhibit.data[header][0] === 'number' || header.includes('%') || header.includes('$')) ? 'text-right' : 'text-left'} whitespace-nowrap">${header}</th>`);
+                        mainContentHtml += '</tr></thead><tbody>';
                         const numRows = exhibit.data[headers[0]].length;
                         for (let i = 0; i < numRows; i++) {
-                            exhibitHtml += `<tr class="border-b" style="border-color: var(--color-border);">`; // Tailwind class
-                            headers.forEach(header => {
-                                const isNumeric = numericHeaders.includes(header) || typeof exhibit.data[header][i] === 'number';
-                                exhibitHtml += `<td class="py-1 px-2 ${isNumeric ? 'text-right' : ''}">${exhibit.data[header][i]}</td>`; // Tailwind classes
-                            });
-                            exhibitHtml += `</tr>`;
+                            mainContentHtml += `<tr class="border-b" style="border-color: var(--color-border);">`;
+                            headers.forEach(header => mainContentHtml += `<td class="py-1 px-2 ${ (typeof exhibit.data[header][i] === 'number' || header.includes('%') || header.includes('$')) ? 'text-right' : 'text-left'} whitespace-nowrap">${exhibit.data[header][i]}</td>`);
+                            mainContentHtml += `</tr>`;
                         }
-                        exhibitHtml += '</tbody>';
-                    }
-                    exhibitHtml += '</table>';
+                        mainContentHtml += '</tbody></table></div>';
+                    } else { mainContentHtml += '<p class="text-xs text-[var(--color-text-medium)]">Table data is malformed or empty.</p>'; }
                 } else if (exhibit.summary_text) {
                     if (Array.isArray(exhibit.summary_text)) {
-                        exhibitHtml += '<ul class="list-disc list-inside pl-4 text-sm" style="color: var(--color-text-medium);">'; // Tailwind classes
-                        exhibit.summary_text.forEach(itemText => exhibitHtml += `<li>${itemText}</li>`);
-                        exhibitHtml += '</ul>';
+                        mainContentHtml += '<ul class="list-disc list-inside pl-4 text-sm" style="color: var(--color-text-medium);">';
+                        exhibit.summary_text.forEach(itemText => mainContentHtml += `<li>${itemText}</li>`);
+                        mainContentHtml += '</ul>';
                     } else {
-                        exhibitHtml += `<p class="text-sm" style="color: var(--color-text-medium);">${exhibit.summary_text}</p>`; // Tailwind class
+                        mainContentHtml += `<p class="text-sm" style="color: var(--color-text-medium);">${exhibit.summary_text.replace(/\n/g, '<br>')}</p>`;
                     }
                 } else if (exhibit.chart_type && exhibit.chart_type !== 'table' && exhibit.data) {
-                    exhibitHtml += `<div id="plotly-chart-exhibit-${exhibitNumber}" class="mt-2" style="min-height: 300px;"></div>`; // Tailwind class
+                    mainContentHtml += `<div id="plotly-chart-exhibit-${exhibitNumberForDisplay}" class="mt-2 w-full"></div>`;
                 }
-                exhibitHtml += `</div>`;
-                htmlContent += exhibitHtml;
+                mainContentHtml += `</div>`;
             });
         }
-        htmlContent += `</div>`;
-        displayAiResponseInMain(htmlContent);
+        setMainBotContentArea(mainContentHtml);
 
         if (currentPromptDetails.exhibits && currentPromptDetails.exhibits.length > 0) {
-            const exhibitsToRender = (currentSkill === 'Analysis') ?
-                                 (currentPromptDetails.exhibits[currentExhibitIndex] ? [currentPromptDetails.exhibits[currentExhibitIndex]] : []) :
-                                 currentPromptDetails.exhibits;
+            const exhibitsToRender = (currentSkill === 'Analysis') ? 
+                                    (currentPromptDetails.exhibits[currentExhibitIndex] ? [currentPromptDetails.exhibits[currentExhibitIndex]] : []) 
+                                    : currentPromptDetails.exhibits; 
             exhibitsToRender.forEach((exhibit, idx) => {
                  if (!exhibit) return;
-                 const exhibitNumber = (currentSkill === 'Analysis') ? currentExhibitIndex + 1 : idx + 1;
+                 const exhibitNumberForDisplay = (currentSkill === 'Analysis') ? currentExhibitIndex + 1 : idx + 1;
                  if (exhibit.chart_type && exhibit.chart_type !== 'table' && exhibit.data && typeof Plotly !== 'undefined') {
-                     renderPlotlyChart(exhibit, exhibitNumber);
+                     if(document.getElementById(`plotly-chart-exhibit-${exhibitNumberForDisplay}`)){
+                        renderPlotlyChart(exhibit, exhibitNumberForDisplay);
+                     } else {
+                        console.warn(`Chart div plotly-chart-exhibit-${exhibitNumberForDisplay} not found for rendering.`);
+                     }
                  }
             });
+        }
+
+        if (currentSkill === "Analysis" && !doneAsking) {
+            const buttonText = (currentPromptDetails.exhibits && currentPromptDetails.exhibits.length > 0 && currentExhibitIndex < currentPromptDetails.exhibits.length - 1) ?
+                               "Submit Analysis & Next Exhibit" : "Submit Final Analysis";
+            createSkillActionButton(buttonText, "submit-analysis-btn", handleSubmitAnalysis);
         }
     }
 
     function renderPlotlyChart(exhibit, exhibitNumber) {
         const chartDivId = `plotly-chart-exhibit-${exhibitNumber}`;
-        const chartDiv = document.getElementById(chartDivId); // Use document.getElementById
-        if (!chartDiv) {
-            console.error("CHIP: Chart div not found:", chartDivId);
-            return;
-        }
+        const chartDiv = document.getElementById(chartDivId);
+        if (!chartDiv) { console.error("renderPlotlyChart: Chart div not found for exhibit:", exhibitNumber, exhibit.exhibit_title); return; }
+        
+        Plotly.purge(chartDivId); 
 
         let plotData = [];
         let layout = {
-            title: { text: exhibit.exhibit_title || '', font: { color: 'var(--color-text-lightest)'}},
-            paper_bgcolor: 'var(--color-bg-content-panels)',
-            plot_bgcolor: 'var(--color-bg-content-panels)',
+            title: { 
+                text: exhibit.exhibit_title || `Exhibit ${exhibitNumber}`, 
+                x: 0.05, 
+                font: { color: 'var(--color-text-lightest)'}
+            },
+            paper_bgcolor: 'var(--color-bg-darkest)',
+            plot_bgcolor: 'var(--color-bg-darkest)',
             font: { color: 'var(--color-text-lightest)' },
             xaxis: {
                 title: { text: exhibit.x_axis || '', font: {color: 'var(--color-text-medium)'}},
@@ -369,183 +557,60 @@ document.addEventListener('DOMContentLoaded', () => {
             yaxis: {
                 title: { text: Array.isArray(exhibit.y_axis) ? exhibit.y_axis.join(', ') : exhibit.y_axis || '', font: {color: 'var(--color-text-medium)'}},
                 gridcolor: 'var(--color-border)',
-                tickfont: {color: 'var(--color-text-medium)'}
+                tickfont: {color: 'var(--color-text-medium)'},
+                automargin: true
             },
-            legend: { font: { color: 'var(--color-text-lightest)'}},
-            margin: { l: 50, r: 20, t: 50, b: 50 }
+            legend: { 
+                font: { color: 'var(--color-text-lightest)'}, 
+                orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x:1
+            },
+            margin: { l: 60, r: 30, t: 80, b: 70 },
+            autosize: true 
         };
 
         try {
             if (exhibit.chart_type === 'bar' && exhibit.data && exhibit.x_axis && exhibit.y_axis) {
                 const xValues = exhibit.data[exhibit.x_axis];
-                (Array.isArray(exhibit.y_axis) ? exhibit.y_axis : [exhibit.y_axis]).forEach(yKey => {
-                    if(exhibit.data[yKey]) { // Ensure yKey data exists
-                        plotData.push({
-                            x: xValues, y: exhibit.data[yKey], type: 'bar', name: yKey,
-                            marker: {color: plotData.length % 2 === 0 ? 'var(--color-accent-primary)' : 'var(--color-accent-secondary)'}
-                        });
-                    } else {
-                        console.warn(`CHIP: Data for y-axis key "${yKey}" not found in exhibit data for bar chart.`);
-                    }
+                (Array.isArray(exhibit.y_axis) ? exhibit.y_axis : [exhibit.y_axis]).forEach((yKey, index) => {
+                    plotData.push({ x: xValues, y: exhibit.data[yKey], type: 'bar', name: yKey, marker: {color: index % 2 === 0 ? 'var(--color-accent-primary)' : 'var(--color-accent-secondary)'} });
                 });
                 layout.barmode = 'group';
             } else if (exhibit.chart_type === 'line' && exhibit.data && exhibit.x_axis && exhibit.y_axis) {
                 const xValues = exhibit.data[exhibit.x_axis];
-                (Array.isArray(exhibit.y_axis) ? exhibit.y_axis : [exhibit.y_axis]).forEach(yKey => {
-                     if(exhibit.data[yKey]) { // Ensure yKey data exists
-                        plotData.push({
-                            x: xValues, y: exhibit.data[yKey], type: 'scatter', mode: 'lines+markers', name: yKey,
-                            line: {color: plotData.length % 2 === 0 ? 'var(--color-accent-primary)' : 'var(--color-accent-secondary)'}
-                        });
-                    } else {
-                        console.warn(`CHIP: Data for y-axis key "${yKey}" not found in exhibit data for line chart.`);
-                    }
+                (Array.isArray(exhibit.y_axis) ? exhibit.y_axis : [exhibit.y_axis]).forEach((yKey, index) => {
+                    plotData.push({ x: xValues, y: exhibit.data[yKey], type: 'scatter', mode: 'lines+markers', name: yKey, line: {color: index % 2 === 0 ? 'var(--color-accent-primary)' : 'var(--color-accent-secondary)'} });
                 });
             } else if (exhibit.chart_type === 'pie' && exhibit.data && exhibit.names && exhibit.values) {
-                 if(exhibit.data[exhibit.names] && exhibit.data[exhibit.values]) { // Ensure data exists
-                    plotData.push({
-                        labels: exhibit.data[exhibit.names], values: exhibit.data[exhibit.values], type: 'pie', hole: 0.4,
-                        marker: { colors: [ 'var(--color-accent-primary)', 'var(--color-accent-secondary)', '#FFBF00', '#4A3B31', '#6B7280']}
-                    });
-                    layout.showlegend = true;
-                } else {
-                     console.warn(`CHIP: Data for names key "${exhibit.names}" or values key "${exhibit.values}" not found for pie chart.`);
-                }
-            }
-
-            if (plotData.length > 0) {
-                Plotly.newPlot(chartDivId, plotData, layout, {responsive: true});
+                plotData.push({ labels: exhibit.data[exhibit.names], values: exhibit.data[exhibit.values], type: 'pie', hole: 0.4, marker: { colors: [ 'var(--color-accent-primary)', 'var(--color-accent-secondary)', '#FFBF00', '#4A3B31', '#6B7280', '#F56565', '#ED8936', '#48BB78', '#38B2AC', '#4299E1']}, textinfo: "label+percent", insidetextorientation: "radial" });
+                layout.showlegend = true; 
             } else {
-                chartDiv.innerHTML = `<p class="text-sm p-2" style="color: var(--color-text-medium);">Chart data for '${exhibit.chart_type}' is misconfigured, not supported, or data is missing.</p>`;
+                 console.warn("Unsupported or misconfigured chart type for Plotly:", exhibit.chart_type, exhibit);
+            }
+            
+            if (plotData.length > 0) {
+                Plotly.newPlot(chartDivId, plotData, layout, {responsive: true, displaylogo: false});
+            } else {
+                chartDiv.innerHTML = `<p class="text-sm p-2" style="color: var(--color-text-medium);">Could not render chart: '${exhibit.chart_type}'. Data might be missing or misconfigured.</p>`;
             }
         } catch (e) {
-            console.error("CHIP: Error rendering Plotly chart:", e);
+            console.error("Error rendering Plotly chart:", e, "Exhibit data:", exhibit);
             chartDiv.innerHTML = `<p class="text-sm p-2" style="color:red;">Error rendering chart. Check console.</p>`;
         }
     }
 
-    function addMessageToHistory(text, sender) {
-        if (!chatHistoryDisplay) {
-            console.warn("CHIP: chatHistoryDisplay element not found.");
-            return;
-        }
-        const messageWrapper = document.createElement('div');
-        messageWrapper.classList.add('flex', 'items-start', 'space-x-2', 'mb-3'); // Tailwind classes
-
-        const avatarContainer = document.createElement('div');
-        avatarContainer.classList.add('w-7', 'h-7', 'rounded-full', 'flex', 'items-center', 'justify-center', 'text-white', 'font-bold', 'text-xs', 'shrink-0'); // Tailwind classes
-
-        const bubbleDiv = document.createElement('div');
-        bubbleDiv.classList.add('chat-bubble');
-        bubbleDiv.textContent = text;
-
-        if (sender === 'user') {
-            messageWrapper.classList.add('justify-end'); // Tailwind class
-            avatarContainer.style.backgroundColor = 'var(--color-accent-secondary)';
-            avatarContainer.style.color = 'var(--color-text-on-secondary-accent)';
-            avatarContainer.textContent = 'U';
-            bubbleDiv.classList.add('user-bubble-history');
-            messageWrapper.appendChild(bubbleDiv);
-            messageWrapper.appendChild(avatarContainer);
-        } else { // AI/Bot
-            avatarContainer.style.backgroundColor = 'transparent';
-            const chipAvatarImg = document.createElement('img');
-            chipAvatarImg.src = chipAvatarSmall;
-            chipAvatarImg.alt = "CHIP";
-            chipAvatarImg.classList.add('w-full', 'h-full', 'rounded-full', 'object-cover'); // Tailwind classes
-            avatarContainer.innerHTML = '';
-            avatarContainer.appendChild(chipAvatarImg);
-            bubbleDiv.classList.add('bot-bubble-history');
-            messageWrapper.appendChild(avatarContainer);
-            messageWrapper.appendChild(bubbleDiv);
-        }
-        chatHistoryDisplay.appendChild(messageWrapper);
-        chatHistoryDisplay.scrollTop = chatHistoryDisplay.scrollHeight;
-    }
-
-    function displayAiResponseInMain(htmlContent) {
-        if (!aiResponseDisplay) {
-            console.warn("CHIP: aiResponseDisplay element not found for displaying main response.");
-            return;
-        }
-        aiResponseDisplay.innerHTML = htmlContent;
-        aiResponseDisplay.scrollTop = aiResponseDisplay.scrollHeight;
-        if (htmlContent && !htmlContent.includes("CHIP is typing...")) {
-            setChipCharacterPose('talking');
-        }
-    }
-
-    function displayTypingIndicator() {
-        setChipCharacterPose('thinking');
-        displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="text-[var(--color-text-medium)] italic p-4">CHIP is typing...</p></div>`);
-    }
-
-    // --- Event Listeners ---
     if (skillButtons.length > 0) {
         skillButtons.forEach(button => {
             button.addEventListener('click', () => {
                 skillButtons.forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
-                initializeSkill(button.textContent.trim());
+                currentSkill = button.textContent.trim(); 
+                initializeSkill(currentSkill);
             });
         });
-    }
-
-
-    if (sendButton) {
-        sendButton.addEventListener('click', () => {
-            if (!chatInput) {
-                console.warn("CHIP: chatInput element not found for send button.");
-                return;
-            }
-            const messageText = chatInput.value.trim();
-            if (messageText) {
-                addMessageToHistory(messageText, 'user');
-                conversationHistory.push({ role: 'user', content: messageText });
-                chatInput.value = '';
-                displayTypingIndicator();
-
-                setTimeout(() => {
-                    const placeholderAiResponse = `This is a placeholder CHIP response to: "${messageText}". Actual interaction would involve calling the AI for skill "${currentSkill}".`;
-                    displayAiResponseInMain(`<div class="bot-bubble-main-content-wrapper"><p class="p-4">${placeholderAiResponse}</p></div>`);
-                    addMessageToHistory(placeholderAiResponse, 'bot');
-                    conversationHistory.push({ role: 'assistant', content: placeholderAiResponse });
-                    setChipCharacterPose('waiting');
-                }, 1500);
-            }
-        });
     } else {
-        console.warn("CHIP: Send button not found.");
+        console.error("No skill buttons found.");
     }
 
-    if (chatInput) {
-        chatInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (sendButton) sendButton.click();
-            }
-        });
-    } else {
-        console.warn("CHIP: Chat input field not found.");
-    }
-    
-    if (clearHistoryButton) {
-        clearHistoryButton.addEventListener('click', handleClearHistory);
-    } else {
-        console.warn("CHIP: Clear history button not found.");
-    }
-
-
-    // --- Initial Setup ---
+    console.log("DOM fully loaded. Starting app initialization.");
     loadPrompts(); 
-
-    displayAiResponseInMain(`
-        <div class="bot-bubble-main-content-wrapper">
-            <p class="font-semibold mb-1 text-lg p-4" style="color: var(--color-accent-primary);">Welcome to CHIP!</p>
-            <p class="p-4 pt-0" style="color: var(--color-text-lightest);">I'm CHIP, your personal case interview practice partner. Select a skill from the top to begin.</p>
-            <p class="mt-2 text-sm p-4 pt-0" style="color: var(--color-text-secondary);">Loading practice cases...</p>
-        </div>
-    `);
-    updateInstructions(currentSkill);
-
-}); // End of DOMContentLoaded
+});
